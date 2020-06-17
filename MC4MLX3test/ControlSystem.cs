@@ -43,21 +43,24 @@ namespace MC4MLX3test
                 // below is setup code to talk to MLX3 on internal gateway
                 remote01 = new Mlx3(0x30, this.ControllerRFGatewayDevice );  // reference the internal gateway for the paramGateway field
                 this.remote01.ButtonStateChange += new ButtonEventHandler(this.Remote_SigChange ); // setup routine to handle a button press
-
-                this.remote01.OnlineStatusChange +=
-                    this.Remote_OnlineStatusChange ;                             // setup routine to handle online/offline status change
-                if (this.remote01.Register() != eDeviceRegistrationUnRegistrationResponse.Success)
+                var homepage = (Mlx3Home) this.remote01.AddPage(eWirelessRemotePageTypes.Home, 3); // sets up a home page
+                remote01.OnlineStatusChange +=
+                    Remote_OnlineStatusChange; // setup routine to handle online/offline status change
+                if (remote01.Register() != eDeviceRegistrationUnRegistrationResponse.Success)
                 {
-                    ErrorLog.Error(string.Format(LogHeader + "Error registering RF Remote: {0}", this.remote01.RegistrationFailureReason));
+                    ErrorLog.Error(string.Format(LogHeader + "Error registering RF Remote: {0}",
+                        remote01.RegistrationFailureReason));
                 }
                 else
                 {
-                    // if we wanted to do something special here
+                    remote01.ShowPage = homepage; // tells the remote to go to the homepage
+                    homepage.CurrentRoom.StringValue = "Office Desk"; // Displays office desk as the room name
                 }
 
-        /// below is the setup code to talk to other processor via EISC
+                // below is the setup code to talk to other processor via EISC
         
                 eisc = new ThreeSeriesTcpIpEthernetIntersystemCommunications(0x51, "192.168.2.64", this);
+                this.eisc.SigChange += new SigEventHandler(Eisc_SigChange); // setup routine to look for data from other processor
                 if (eisc.Register() != eDeviceRegistrationUnRegistrationResponse.Success)
                 {
                     ErrorLog.Error("Error registering EISC IPID Reason {1}",eisc.RegistrationFailureReason);
@@ -88,7 +91,8 @@ namespace MC4MLX3test
         {
             try
             {
-                remote01 = new Mlx3(0x30, this.ControllerRFGatewayDevice );  // reference the internal gateway for the paramGateway field
+                // remote01 = new Mlx3(0x30, this.ControllerRFGatewayDevice );  // reference the internal gateway for the paramGateway field
+                // remote01.ShowPage = Mlx3Home
                 
             }
             catch (Exception e)
@@ -132,11 +136,11 @@ namespace MC4MLX3test
         /// This event only applies to this SIMPL#Pro program, it doesn't receive events
         /// for other programs stopping
         /// </summary>
-        /// <param name="programStatusEventType"></param>
-        ///
+        // <param name="programStatusEventType"></param>
+        //
         public void Remote_SigChange(GenericBase currentDevice, ButtonEventArgs args)
         {
-            /*switch (args.Button.Name)  /// you can use the button name returned to perform actions, or you can use button number. 
+            /*switch (args.Button.Name)  // you can use the button name returned to perform actions, or you can use button number. 
             {
                 case eButtonName.VolumeUp:
                     ErrorLog.Notice(string.Format(LogHeader + "Volume Up"));
@@ -155,13 +159,51 @@ namespace MC4MLX3test
                  
             {
                 eisc.BooleanInput[args.Button.Number].BoolValue = true;  // we are doing a 1-to-1 correspondence of button number to digital on the EISC
-                ErrorLog.Notice(String.Format(LogHeader + "Button {0} has state {1}",args.Button.Name, args.Button.State)); 
+                ErrorLog.Notice(String.Format(LogHeader + "Button {0} has state {1}",args.Button.Name, args.Button.State));
+                if (args.Button.Name == eButtonName.VolumeUp || args.Button.Name == eButtonName.VolumeDown)
+                {
+                    // if we wanted to local button presses to display the volume subpage we would do it here
+                }
             }
             else
             {
                 eisc.BooleanInput[args.Button.Number].BoolValue = false;
             }
             
+        }
+
+        public void Eisc_SigChange(BasicTriList currentDevice, SigEventArgs args)
+        {
+            switch (args.Sig.Type)
+            {
+                case eSigType.Bool:
+                    switch (args.Sig.Number)
+                    {
+                        case 7: 
+                            // ErrorLog.Notice(String.Format(LogHeader + "Got remote vol pop"));
+                            // here we use a digital from a remote system to display the volume bar
+                            remote01.PageActiveFeedback.ShowVolumeSubpage.BoolValue = args.Sig.BoolValue;
+                            break;
+                        case 16:
+                            // show the mute "subpage" on the MLX3
+                            remote01.PageActiveFeedback.ShowMuteSubpage.BoolValue = args.Sig.BoolValue;
+                            break;
+                        
+                    }
+                    break;
+                case eSigType.String:
+                    break;
+                case eSigType.UShort:
+                    switch (args.Sig.Number)
+                    {
+                        case 1:
+                            ushort volumeLevel = Convert.ToUInt16(args.Sig.UShortValue / 655.35);
+                            remote01.PageActiveFeedback.VolumeLevel(volumeLevel);  // There seems to be an issue on the MLX3 - the volume bar graph does not populate. But otherwise, this line should work.
+                            break;
+                    }
+
+                    break;
+            }
         }
         public void Remote_OnlineStatusChange(GenericBase currentDevice, OnlineOfflineEventArgs args)
         {
@@ -207,7 +249,7 @@ namespace MC4MLX3test
         /// Use this event to clean up when someone types in reboot, or when your SD /USB
         /// removable media is ejected / re-inserted.
         /// </summary>
-        /// <param name="systemEventType"></param>
+        // <param name="systemEventType"></param>
         void ControlSystem_ControllerSystemEventHandler(eSystemEventType systemEventType)
         {
             switch (systemEventType)
@@ -221,7 +263,7 @@ namespace MC4MLX3test
                 case (eSystemEventType.Rebooting):
                     //The system is rebooting.
                     //Very limited time to preform clean up and save any settings to disk.
-                    ErrorLog.Warn(string.Format("Help Meeeee....."));
+                    ErrorLog.Warn(string.Format("Help Me....."));
                     break;
             }
 
